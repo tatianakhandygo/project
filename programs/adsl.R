@@ -4,28 +4,19 @@
 #
 # Input: dm, ex, ds
 library(admiral)
-library(admiral.test) # Contains example datasets from the CDISC pilot project
 library(dplyr)
 library(lubridate)
 library(stringr)
+library(haven)
+library(xportr)
 
 # Load source datasets ----
 
-# Use e.g. haven::read_sas to read in .sas7bdat, or other suitable functions
-# as needed and assign to the variables below.
-# For illustration purposes read in admiral test data
-
-data("admiral_dm")
-data("admiral_ds")
-data("admiral_ex")
-data("admiral_ae")
-data("admiral_lb")
-
-dm <- admiral_dm
-ds <- admiral_ds
-ex <- admiral_ex
-ae <- admiral_ae
-lb <- admiral_lb
+dm <- read_xpt("sdtm/dm.xpt")
+ds <- read_xpt("sdtm/ds.xpt")
+ex <- read_xpt("sdtm/ex.xpt")
+ae <- read_xpt("sdtm/ae.xpt")
+lb <- read_xpt("sdtm/lb.xpt")
 
 # When SAS datasets are imported into R using haven::read_sas(), missing
 # character values from SAS appear as "" characters in R, instead of appearing
@@ -266,6 +257,4 @@ adsl <- adsl %>%
 
 # Save output ----
 
-dir <- tempdir() # Change to whichever directory you want to save the dataset in
-saveRDS(adsl, file = file.path(dir, "adsl.rds"), compress = "bzip2")
-
+xportr_write(adsl, "adam/adsl.xpt")
