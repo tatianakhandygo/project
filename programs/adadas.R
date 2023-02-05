@@ -29,52 +29,61 @@ qs <- convert_blanks_to_na(qs)
 # Assign PARAMCD, PARAM, and PARAMN
 param_lookup <- tibble::tribble(
   ~QSTESTCD, ~PARAMCD, ~PARAM, ~PARAMN,
-  "SYSBP", "SYSBP", "Systolic Blood Pressure (mmHg)", 1,
-  "DIABP", "DIABP", "Diastolic Blood Pressure (mmHg)", 2,
-  "PULSE", "PULSE", "Pulse Rate (beats/min)", 3,
-  "WEIGHT", "WEIGHT", "Weight (kg)", 4,
-  "HEIGHT", "HEIGHT", "Height (cm)", 5,
-  "TEMP", "TEMP", "Temperature (C)", 6,
-  "MAP", "MAP", "Mean Arterial Pressure (mmHg)", 7,
-  "BMI", "BMI", "Body Mass Index(kg/m^2)", 8,
-  "BSA", "BSA", "Body Surface Area(m^2)", 9
+  "ACITM01", "ACITM01", "Word Recall Task", 1,
+  "ACITM02", "ACITM02", "Naming Objects And Fingers (Refer To 5 C", 2,
+  "ACITM03", "ACITM03", "Delayed Word Recall", 3,
+  "ACITM04", "ACITM04", "Commands", 4,
+  "ACITM05", "ACITM05", "Constructional Praxis", 5,
+  "ACITM06", "ACITM06", "Ideational Praxis", 6,
+  "ACITM07", "ACITM07", "Orientation", 7,
+  "ACITM08", "ACITM08", "Word Recognition", 8,
+  "ACITM09", "ACITM09", "Attention/Visual Search Task", 9,
+  "ACITM10", "ACITM10", "Maze Solution", 10,
+  "ACITM11", "ACITM11", "Spoken Language Ability", 11,
+  "ACITM12", "ACITM12", "Comprehension Of Spoken Language", 12,
+  "ACITM13", "ACITM13", "Word Finding Difficulty In Spontaneous S", 13,
+  "ACITM14", "ACITM14", "Recall Of Test Instructions", 14,
+  "ACTOT",   "ACTOT",		"Adas-Cog(11) Subscore",	15
 )
-attr(param_lookup$VSTESTCD, "label") <- "Vital Signs Test Short Name"
+attr(param_lookup$QSTESTCD, "label") <- "Question Short Name"
 
-
-# Assign ANRLO/HI, A1LO/HI
-range_lookup <- tibble::tribble(
-  ~PARAMCD, ~ANRLO, ~ANRHI, ~A1LO, ~A1HI,
-  "SYSBP", 90, 130, 70, 140,
-  "DIABP", 60, 80, 40, 90,
-  "PULSE", 60, 100, 40, 110,
-  "TEMP", 36.5, 37.5, 35, 38
-)
-# ASSIGN AVALCAT1
-avalcat_lookup <- tibble::tribble(
-  ~PARAMCD, ~AVALCA1N, ~AVALCAT1,
-  "HEIGHT", 1, ">100 cm",
-  "HEIGHT", 2, "<= 100 cm"
-)
+# # Assign ANRLO/HI, A1LO/HI
+# range_lookup <- tibble::tribble(
+#   ~PARAMCD, ~ANRLO, ~ANRHI, ~A1LO, ~A1HI,
+#   "SYSBP", 90, 130, 70, 140,
+#   "DIABP", 60, 80, 40, 90,
+#   "PULSE", 60, 100, 40, 110,
+#   "TEMP", 36.5, 37.5, 35, 38
+# )
+# # ASSIGN AVALCAT1
+# avalcat_lookup <- tibble::tribble(
+#   ~PARAMCD, ~AVALCA1N, ~AVALCAT1,
+#   "HEIGHT", 1, ">100 cm",
+#   "HEIGHT", 2, "<= 100 cm"
+# )
 
 # User defined functions ----
 
 # Here are some examples of how you can create your own functions that
 #  operates on vectors, which can be used in `mutate()`.
-format_avalcat1n <- function(param, aval) {
-  case_when(
-    param == "HEIGHT" & aval > 140 ~ 1,
-    param == "HEIGHT" & aval <= 140 ~ 2
-  )
-}
+# format_avalcat1n <- function(param, aval) {
+#   case_when(
+#     param == "HEIGHT" & aval > 140 ~ 1,
+#     param == "HEIGHT" & aval <= 140 ~ 2
+#   )
+# }
 
 # Derivations ----
+
+# Filter QS only to PARAMCDs mentioned in the spec
+adqs <- qs %>%
+  filter(QSTESTCD %in% unique(param_lookup$QSTESTCD))
 
 # Get list of ADSL vars required for derivations
 adsl_vars <- vars(TRTSDT, TRTEDT, TRT01A, TRT01P)
 
-advs <- vs %>%
-  # Join ADSL with VS (need TRTSDT for ADY derivation)
+adqs <- adqs %>%
+  # Join ADSL with QS (need TRTSDT for ADY derivation)
   derive_vars_merged(
     dataset_add = adsl,
     new_vars = adsl_vars,
@@ -83,59 +92,35 @@ advs <- vs %>%
   ## Calculate ADT, ADY ----
   derive_vars_dt(
     new_vars_prefix = "A",
-    dtc = VSDTC
+    dtc = QSDTC
   ) %>%
   derive_vars_dy(reference_date = TRTSDT, source_vars = vars(ADT))
 
-advs <- advs %>%
+adqs <- adqs %>%
   ## Add PARAMCD only - add PARAM etc later ----
   derive_vars_merged_lookup(
     dataset_add = param_lookup,
     new_vars = vars(PARAMCD),
-    by_vars = vars(VSTESTCD)
+    by_vars = vars(QSTESTCD)
   ) %>%
   ## Calculate AVAL and AVALC ----
   mutate(
-    AVAL = VSSTRESN,
-    AVALC = VSSTRESC
-  ) %>%
+    AVAL = QSSTRESN,
+    AVALC = QSSTRESC
+  )
   ## Derive new parameters based on existing records ----
   # Note that, for the following three `derive_param_*()` functions, only the
   # variables specified in `by_vars` will be populated in the newly created
   # records.
 
-  # Derive Mean Arterial Pressure
-  derive_param_map(
-    by_vars = vars(STUDYID, USUBJID, !!!adsl_vars, VISIT, VISITNUM, ADT, ADY, VSTPT, VSTPTNUM),
-    set_values_to = vars(PARAMCD = "MAP"),
-    get_unit_expr = VSSTRESU,
-    filter = VSSTAT != "NOT DONE" | is.na(VSSTAT)
-  ) %>%
-  # Derive Body Surface Area
-  derive_param_bsa(
-    by_vars = vars(STUDYID, USUBJID, !!!adsl_vars, VISIT, VISITNUM, ADT, ADY, VSTPT, VSTPTNUM),
-    method = "Mosteller",
-    set_values_to = vars(PARAMCD = "BSA"),
-    get_unit_expr = VSSTRESU,
-    filter = VSSTAT != "NOT DONE" | is.na(VSSTAT)
-  ) %>%
-  # Derive Body Mass Index
-  derive_param_bmi(
-    by_vars = vars(STUDYID, USUBJID, !!!adsl_vars, VISIT, VISITNUM, ADT, ADY, VSTPT, VSTPTNUM),
-    set_values_to = vars(PARAMCD = "BMI"),
-    get_unit_expr = VSSTRESU,
-    filter = VSSTAT != "NOT DONE" | is.na(VSSTAT)
-  )
-
-
 ## Get visit info ----
 # See also the "Visit and Period Variables" vignette
 # (https://pharmaverse.github.io/admiral/articles/visits_periods.html#visits)
-advs <- advs %>%
+adqs <- adqs %>%
   # Derive Timing
   mutate(
-    ATPTN = VSTPTNUM,
-    ATPT = VSTPT,
+    ATPTN = QSTPTNUM,
+    ATPT = QSTPT,
     AVISIT = case_when(
       str_detect(VISIT, "SCREEN|UNSCHED|RETRIEVAL|AMBUL") ~ NA_character_,
       !is.na(VISIT) ~ str_to_title(VISIT),
